@@ -188,7 +188,7 @@
       <div class="row">
         <button id="btn-generate" onclick="generateSpeech()">Generate</button>
         <button class="secondary" onclick="stopGeneration()">Stop</button>
-        <span class="kbd"><span>&#8984;</span>+<span>Enter</span></span>
+        <span class="kbd" id="kbd-shortcut"><span>&#8984;</span>+<span>Enter</span></span>
       </div>
       <div id="status"></div>
       <audio id="audio-player" controls></audio>
@@ -394,6 +394,25 @@ document.addEventListener('keydown', (e) => {
     generateSpeech();
   }
 });
+
+// Platform-aware keyboard shortcut hint
+document.addEventListener('DOMContentLoaded', () => {
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+  const kbd = document.getElementById('kbd-shortcut');
+  if (kbd && !isMac) {
+    kbd.innerHTML = '<span>Ctrl</span>+<span>Enter</span>';
+  }
+});
+
+// Read server URL from query param (e.g. tts.html?server=my-mac:8000)
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const server = params.get('server');
+  if (server) {
+    const url = server.match(/^https?:\/\//) ? server : 'http://' + server;
+    document.getElementById('server-url').value = url;
+  }
+})();
 
 // Check server on load
 checkServer();
