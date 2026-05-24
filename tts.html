@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MLX Audio TTS</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #333;
+    --text: #e0e0e0;
+    --text2: #999;
+    --accent: #f0a040;
+    --accent-hover: #f0b860;
+    --danger: #e05555;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .container { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 20px; }
+  h1 { font-size: 22px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  h1 .dot { width: 8px; height: 8px; border-radius: 50%; background: #4a4; flex-shrink: 0; }
+  h1 .dot.disconnected { background: #e05555; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > * { flex: 1; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text2); }
+  input, select, textarea {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--text); padding: 10px 12px;
+    font-size: 14px; outline: none; transition: border-color 0.2s; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  select { cursor: pointer; }
+  button {
+    background: var(--accent); color: #0d0d0d; border: none;
+    border-radius: 6px; padding: 10px 24px; font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: background 0.2s, opacity 0.2s;
+  }
+  button:hover { background: var(--accent-hover); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+  }
+  button.secondary:hover { background: #2a2a2a; }
+  .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .checkbox-row input { width: 16px; height: 16px; }
+  #status { font-size: 12px; color: var(--text2); min-height: 16px; }
+  #status.error { color: var(--danger); }
+  #status.success { color: #4a4; }
+  audio { width: 100%; border-radius: var(--radius); }
+  .server-row { display: flex; align-items: center; gap: 10px; }
+  .server-row input { flex: 1; }
+  .server-row button { flex: 0; padding: 10px 14px; }
+  .tabs { display: flex; gap: 0; flex-wrap: wrap; }
+  .tabs button.tab {
+    background: var(--surface2); color: var(--text2);
+    border: 1px solid var(--border); border-radius: 0;
+    padding: 8px 20px; font-size: 13px; font-weight: 500;
+  }
+  .tabs button.tab:first-child { border-radius: 6px 0 0 6px; }
+  .tabs button.tab:last-child { border-radius: 0 6px 6px 0; }
+  .tabs button.tab.active { background: var(--accent); color: #0d0d0d; border-color: var(--accent); }
+  .hidden { display: none; }
+  .inline-model { font-size: 12px; color: var(--text2); margin-top: -8px; }
+  .inline-model input { width: 100%; font-size: 12px; padding: 6px 8px; }
+  .kbd { font-size: 11px; color: var(--text2); }
+  .kbd span {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 5px; font-family: monospace;
+  }
+  .hint { font-size: 11px; color: var(--text2); margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>MLX Audio TTS <span class="dot disconnected" id="conn-dot" title="Server connection"></span></h1>
+
+  <div class="card">
+    <div class="server-row">
+      <label style="flex:0; min-width:60px">Server</label>
+      <input id="server-url" value="http://localhost:8000" placeholder="http://localhost:8000">
+      <button id="btn-connect" class="secondary" onclick="checkServer()">Connect</button>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('tts')">TTS</button>
+      <button class="tab" onclick="switchTab('models')">Models</button>
+    </div>
+
+    <!-- TTS tab -->
+    <div id="tab-tts">
+      <div class="inline-model">
+        Model: <input id="model-id-tts" value="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" placeholder="Model ID">
+      </div>
+      <label>Text
+        <textarea id="text-input" placeholder="Enter text to synthesize...">Hello, welcome to MLX Audio TTS!</textarea>
+      </label>
+
+      <div class="row">
+        <label>Reference Audio
+          <select id="ref-audio-select">
+            <option value="ref/2.wav">2.wav</option>
+            <option value="ref/custom_aiden_gen1_dynamic.wav">custom_aiden_gen1_dynamic.wav</option>
+            <option value="ref/custom_aiden_gen1_static.wav">custom_aiden_gen1_static.wav</option>
+            <option value="ref/custom_aiden_gen2_dynamic.wav">custom_aiden_gen2_dynamic.wav</option>
+            <option value="ref/custom_aiden_gen2_static.wav">custom_aiden_gen2_static.wav</option>
+            <option value="ref/custom_serena_gen1_dynamic.wav">custom_serena_gen1_dynamic.wav</option>
+            <option value="ref/custom_serena_gen1_static.wav">custom_serena_gen1_static.wav</option>
+            <option value="ref/custom_serena_gen2_dynamic.wav">custom_serena_gen2_dynamic.wav</option>
+            <option value="ref/custom_serena_gen2_static.wav">custom_serena_gen2_static.wav</option>
+            <option value="ref/icl_ref_audio_2_gen1_dynamic.wav">icl_ref_audio_2_gen1_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_2_gen1_nsm_false.wav">icl_ref_audio_2_gen1_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_2_gen1_nsm_true.wav">icl_ref_audio_2_gen1_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_2_gen1_static.wav">icl_ref_audio_2_gen1_static.wav</option>
+            <option value="ref/icl_ref_audio_2_gen2_dynamic.wav">icl_ref_audio_2_gen2_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_2_gen2_nsm_false.wav">icl_ref_audio_2_gen2_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_2_gen2_nsm_true.wav">icl_ref_audio_2_gen2_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_2_gen2_static.wav">icl_ref_audio_2_gen2_static.wav</option>
+            <option value="ref/icl_ref_audio_3_gen1_dynamic.wav">icl_ref_audio_3_gen1_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_3_gen1_nsm_false.wav">icl_ref_audio_3_gen1_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_3_gen1_nsm_true.wav">icl_ref_audio_3_gen1_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_3_gen1_static.wav">icl_ref_audio_3_gen1_static.wav</option>
+            <option value="ref/icl_ref_audio_3_gen2_dynamic.wav">icl_ref_audio_3_gen2_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_3_gen2_nsm_false.wav">icl_ref_audio_3_gen2_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_3_gen2_nsm_true.wav">icl_ref_audio_3_gen2_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_3_gen2_static.wav">icl_ref_audio_3_gen2_static.wav</option>
+            <option value="ref/icl_ref_audio_gen1_dynamic.wav">icl_ref_audio_gen1_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_gen1_nsm_false.wav">icl_ref_audio_gen1_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_gen1_nsm_true.wav">icl_ref_audio_gen1_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_gen1_static.wav">icl_ref_audio_gen1_static.wav</option>
+            <option value="ref/icl_ref_audio_gen2_dynamic.wav">icl_ref_audio_gen2_dynamic.wav</option>
+            <option value="ref/icl_ref_audio_gen2_nsm_false.wav">icl_ref_audio_gen2_nsm_false.wav</option>
+            <option value="ref/icl_ref_audio_gen2_nsm_true.wav">icl_ref_audio_gen2_nsm_true.wav</option>
+            <option value="ref/icl_ref_audio_gen2_static.wav">icl_ref_audio_gen2_static.wav</option>
+          </select>
+        </label>
+        <label>Speed
+          <input id="speed" type="number" value="1.0" min="0.5" max="2.0" step="0.1">
+        </label>
+      </div>
+      <label>Reference Text <span class="hint">(what is spoken in the reference audio — optional, auto-transcribes if blank)</span>
+        <input id="ref-text" type="text" placeholder="e.g. Hello, this is my voice.">
+      </label>
+
+      <div class="row">
+        <label>Temperature
+          <input id="temperature" type="number" value="0.7" min="0.1" max="2.0" step="0.05">
+        </label>
+        <label>Top-P
+          <input id="top-p" type="number" value="0.95" min="0.1" max="1.0" step="0.05">
+        </label>
+        <label>Top-K
+          <input id="top-k" type="number" value="40" min="1" max="100" step="1">
+        </label>
+      </div>
+      <div class="row">
+        <label>Format
+          <select id="response-format">
+            <option value="wav">WAV</option>
+            <option value="mp3">MP3</option>
+          </select>
+        </label>
+        <label>Max Tokens
+          <input id="max-tokens" type="number" value="1200" min="100" max="4000" step="50">
+        </label>
+        <label class="checkbox-row" style="flex:0; min-width:70px">
+          <input type="checkbox" id="stream-toggle">
+          Stream
+        </label>
+      </div>
+      <div class="row">
+        <button id="btn-generate" onclick="generateSpeech()">Generate</button>
+        <button class="secondary" onclick="stopGeneration()">Stop</button>
+        <span class="kbd"><span>&#8984;</span>+<span>Enter</span></span>
+      </div>
+      <div id="status"></div>
+      <audio id="audio-player" controls></audio>
+    </div>
+
+    <!-- Models tab -->
+    <div id="tab-models" class="hidden">
+      <div class="row">
+        <label style="flex:1">Model ID
+          <input id="model-id" value="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit" placeholder="mlx-community/Qwen3-TTS-12Hz-1.7B-Base-8bit">
+        </label>
+        <label style="flex:0; align-self:flex-end">
+          <button id="btn-load-model" onclick="loadModel()">Preload</button>
+        </label>
+      </div>
+      <div id="model-list" style="font-size:13px;color:var(--text2)">No models loaded</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let abortController = null;
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.textContent.trim().toLowerCase().includes(tab));
+  });
+  $('#tab-tts').classList.toggle('hidden', tab !== 'tts');
+  $('#tab-models').classList.toggle('hidden', tab !== 'models');
+}
+
+async function api(method, path, body) {
+  const base = $('#server-url').value.replace(/\/$/, '');
+  const opts = { method };
+  if (method !== 'DELETE') opts.headers = { 'Content-Type': 'application/json' };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${base}${path}`, opts);
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`${res.status}: ${txt}`);
+  }
+  if (res.status === 204) return null;
+  return res;
+}
+
+async function checkServer() {
+  const dot = $('#conn-dot');
+  dot.className = 'dot disconnected';
+  try {
+    const res = await fetch($('#server-url').value.replace(/\/$/, '') + '/');
+    await res.json();
+    dot.className = 'dot';
+    dot.title = 'Connected';
+    refreshModels();
+  } catch (e) {
+    dot.className = 'dot disconnected';
+    dot.title = 'Disconnected: ' + e.message;
+  }
+}
+
+async function refreshModels() {
+  try {
+    const res = await api('GET', '/v1/models');
+    const data = await res.json();
+    if (data.data && data.data.length > 0) {
+      $('#model-list').innerHTML = data.data.map(m =>
+        `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">
+           <span style="flex:1;font-family:monospace;font-size:12px">${m.id}</span>
+           <button class="secondary" style="padding:2px 8px;font-size:11px" onclick="removeModel('${m.id}')">Remove</button>
+         </div>`
+      ).join('');
+    } else {
+      $('#model-list').textContent = 'No models loaded — the first TTS request will auto-load the model';
+    }
+  } catch (e) {
+    $('#model-list').textContent = 'Failed to list models: ' + e.message;
+  }
+}
+
+async function loadModel() {
+  const modelId = $('#model-id').value.trim();
+  if (!modelId) return;
+  const btn = $('#btn-load-model');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  try {
+    await api('POST', `/v1/models?model_name=${encodeURIComponent(modelId)}`);
+    refreshModels();
+  } catch (e) {
+    $('#model-list').textContent = 'Error: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Preload';
+  }
+}
+
+async function removeModel(name) {
+  try {
+    await api('DELETE', `/v1/models?model_name=${encodeURIComponent(name)}`);
+    refreshModels();
+  } catch (e) {
+    $('#model-list').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function generateSpeech() {
+  const modelId = $('#model-id-tts').value.trim();
+  const text = $('#text-input').value.trim();
+  if (!modelId || !text) { showStatus('Please provide model ID and text', 'error'); return; }
+
+  abortController = new AbortController();
+  const btn = $('#btn-generate');
+  btn.disabled = true;
+  btn.textContent = 'Generating...';
+  $('#status').textContent = '';
+  $('#status').className = '';
+
+  const body = {
+    model: modelId,
+    input: text,
+    speed: parseFloat($('#speed').value) || 1.0,
+    temperature: parseFloat($('#temperature').value) || 0.7,
+    top_p: parseFloat($('#top-p').value) || 0.95,
+    top_k: parseInt($('#top-k').value) || 40,
+    max_tokens: parseInt($('#max-tokens').value) || 1200,
+    response_format: $('#response-format').value || 'wav',
+    stream: $('#stream-toggle').checked,
+    ref_audio: $('#ref-audio-select').value,
+  };
+
+  const refText = $('#ref-text').value.trim();
+  if (refText) {
+    body.ref_text = refText;
+  }
+
+  try {
+    const base = $('#server-url').value.replace(/\/$/, '');
+    const res = await fetch(`${base}/v1/audio/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: abortController.signal,
+    });
+
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`${res.status}: ${txt}`);
+    }
+
+    const mime = body.response_format === 'mp3' ? 'audio/mpeg' : 'audio/wav';
+    const reader = res.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      totalBytes += value.length;
+      if (body.stream) {
+        $('#status').textContent = `Streaming... ${(totalBytes / 1024).toFixed(0)} KB`;
+      }
+    }
+
+    if (chunks.length === 0) throw new Error('No audio data received');
+
+    const blob = new Blob(chunks, { type: mime });
+    URL.revokeObjectURL($('#audio-player').src);
+    $('#audio-player').src = URL.createObjectURL(blob);
+    $('#audio-player').play();
+    showStatus(`Done (${(totalBytes / 1024).toFixed(0)} KB)`, 'success');
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      showStatus('Cancelled', '');
+    } else {
+      showStatus(e.message, 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Generate';
+    abortController = null;
+  }
+}
+
+function showStatus(msg, cls) {
+  $('#status').textContent = msg;
+  $('#status').className = cls;
+}
+
+function stopGeneration() {
+  if (abortController) {
+    abortController.abort();
+    abortController = null;
+    showStatus('Stopped', '');
+  }
+}
+
+// Keyboard shortcut: Cmd/Ctrl+Enter to generate
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    e.preventDefault();
+    generateSpeech();
+  }
+});
+
+// Check server on load
+checkServer();
+</script>
+</body>
+</html>
