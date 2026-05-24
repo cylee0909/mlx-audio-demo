@@ -1,0 +1,13 @@
+mlx>=0.20.0
+mlx-lm>=0.20.0
+mlx-audio>=0.4.3
+numpy
+scipy
+transformers
+huggingface_hub
+tqdm
+sounddevice
+miniaudio
+fastapi
+uvicorn
+webrtcvad
